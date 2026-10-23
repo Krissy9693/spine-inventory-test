@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Spine Equipment Inventory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a stockroom ledger. Sticky header with three tabs, one working panel below. Titanium neutrals, cobalt accent. */
+:root {
+  --bg: #f2f4f6;
+  --surface: #ffffff;
+  --sunken: #e8ecf0;
+  --line: #d3d9df;
+  --ink: #15202a;
+  --muted: #5b6875;
+  --accent: #1d58b8;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2ebf9;
+  --good: #1d7a4e;
+  --good-soft: #e0f2e8;
+  --warn: #9a5b00;
+  --warn-soft: #fbefd9;
+  --bad: #b3261e;
+  --bad-soft: #fbe5e3;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #17202a; --sunken: #121a22; --line: #2a3643; --ink: #e6ebf0; --muted: #94a2b0;
+    --accent: #6c9ef0; --accent-ink: #0b1220; --accent-soft: #1b2b45;
+    --good: #5cc795; --good-soft: #143326; --warn: #e5ae55; --warn-soft: #3a2a10; --bad: #f08a82; --bad-soft: #3d1a18;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #17202a; --sunken: #121a22; --line: #2a3643; --ink: #e6ebf0; --muted: #94a2b0;
+  --accent: #6c9ef0; --accent-ink: #0b1220; --accent-soft: #1b2b45;
+  --good: #5cc795; --good-soft: #143326; --warn: #e5ae55; --warn-soft: #3a2a10; --bad: #f08a82; --bad-soft: #3d1a18;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
+.head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px 0; }
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brand h1 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 1.35rem; letter-spacing: -0.01em; text-wrap: balance; }
+.brand p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.stock-value { text-align: right; }
+.stock-value .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.stock-value .num { font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+nav { display: flex; gap: 4px; margin-top: 12px; overflow-x: auto; }
+nav button { appearance: none; border: 0; background: none; color: var(--muted); font: 600 0.92rem var(--font-body); padding: 10px 14px; border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
+nav button:hover { color: var(--ink); }
+nav button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+nav button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+main { padding-block: 24px 64px; }
+section[role="tabpanel"] { display: flex; flex-direction: column; gap: 20px; }
+h2 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; max-width: 65ch; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+.notice { padding: 12px 14px; border-radius: 8px; background: var(--sunken); color: var(--muted); font-size: 0.9rem; }
+.notice.error { background: var(--bad-soft); color: var(--bad); }
+.notice.ok { background: var(--good-soft); color: var(--good); }
+
+/* Forms */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px 16px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+label { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+label .req { color: var(--bad); }
+input, select { width: 100%; font: 400 0.95rem var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; }
+input.mono { font-family: var(--font-mono); font-size: 0.9rem; }
+.hint { font-size: 0.78rem; color: var(--muted); }
+.form-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
+.btn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 600 0.9rem var(--font-body); padding: 9px 16px; border-radius: 7px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--bad); }
+.btn.small { padding: 5px 10px; font-size: 0.8rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Recently logged list */
+.recent { display: flex; flex-direction: column; }
+.recent-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.recent-row:first-child { border-top: 0; }
+.recent-row .name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.recent-row .meta { grid-column: 1; font-size: 0.82rem; color: var(--muted); font-family: var(--font-mono); overflow-wrap: anywhere; }
+.recent-row .price { grid-row: 1 / span 2; grid-column: 2; align-self: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* Summary strip */
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.summary > div { background: var(--surface); padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+.summary .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.summary .num { font-family: var(--font-display); font-weight: 700; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+
+/* Toolbar */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.toolbar .field { flex: 1 1 180px; }
+.toolbar .field.search { flex: 2 1 260px; }
+
+/* Table */
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--sunken); white-space: nowrap; }
+th.num, td.num { text-align: right; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.mono { font-family: var(--font-mono); font-size: 0.82rem; white-space: nowrap; }
+td .item-name { font-weight: 600; }
+td .item-sub { color: var(--muted); font-size: 0.8rem; }
+td.actions { white-space: nowrap; text-align: right; }
+td.actions .btn + .btn { margin-left: 6px; }
+tfoot td { font-weight: 700; background: var(--sunken); }
+.chip { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.stock { background: var(--good-soft); color: var(--good); }
+.chip.sold { background: var(--sunken); color: var(--muted); }
+.chip.example { background: var(--warn-soft); color: var(--warn); margin-left: 6px; }
+.chip.cat { background: var(--accent-soft); color: var(--accent); }
+
+/* Inline sell / confirm panel inside a table row */
+tr.inline-row td { background: var(--accent-soft); }
+.inline-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.inline-form .field { flex: 1 1 160px; }
+.inline-form .msg { flex-basis: 100%; font-size: 0.85rem; }
+
+/* Monthly sales */
+.chart { display: flex; gap: 8px; align-items: end; height: 220px; padding: 12px 4px 0; overflow-x: auto; }
+.bar-col { flex: 1 0 44px; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: end; min-width: 44px; }
+.bar { width: 70%; max-width: 48px; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px; }
+.bar.empty { background: var(--line); }
+.bar-val { font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bar-label { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+.month-list { display: flex; flex-direction: column; gap: 12px; }
+details.month { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+details.month summary { cursor: pointer; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 14px 16px; list-style: none; }
+details.month summary::-webkit-details-marker { display: none; }
+details.month summary .m-name { font-family: var(--font-display); font-weight: 700; }
+details.month summary .m-stats { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+details.month summary .m-stats strong { color: var(--ink); }
+details.month[open] summary { border-bottom: 1px solid var(--line); }
+details.month .table-wrap { border: 0; border-radius: 0; }
+
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px; }
+.empty-state { text-align: center; padding: 36px 16px; color: var(--muted); }
+.empty-state strong { display: block; color: var(--ink); font-family: var(--font-display); font-size: 1.05rem; margin-bottom: 4px; }
+
+@media (max-width: 560px) {
+  .stock-value { text-align: left; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bar { transition: height 0.4s ease; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="head-row">
+      <div class="brand">
+        <h1>Spine Equipment Inventory</h1>
+        <p>Storage unit stock, prices and serial numbers</p>
+      </div>
+      <div class="stock-value">
+        <div class="label">Value in storage</div>
+        <div class="num" id="hdr-value">—</div>
+      </div>
+    </div>
+    <nav role="tablist" aria-label="Pages">
+      <button role="tab" id="tab-log" aria-controls="log" aria-selected="false">Log equipment</button>
+      <button role="tab" id="tab-inventory" aria-controls="inventory" aria-selected="true">Inventory</button>
+      <button role="tab" id="tab-sales" aria-controls="sales" aria-selected="false">Monthly sales</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="global-msg" class="notice" hidden></div>
+
+  <!-- LOG -->
+  <section role="tabpanel" id="log" aria-labelledby="tab-log" hidden>
+    <div>
+      <h2>Log equipment</h2>
+      <p class="sub">Add each piece as it goes into the storage unit. Every serial number can only be logged once.</p>
+    </div>
+    <form class="panel" id="log-form" novalidate>
+      <div class="form-grid">
+        <div class="field wide">
+          <label for="f-name">Item name <span class="req">*</span></label>
+          <input id="f-name" required placeholder="e.g. Lumbar PEEK interbody cage, 10 mm">
+        </div>
+        <div class="field">
+          <label for="f-category">Category <span class="req">*</span></label>
+          <select id="f-category" required></select>
+        </div>
+        <div class="field">
+          <label for="f-model">Model / catalog no.</label>
+          <input id="f-model" class="mono" placeholder="e.g. TL-1045">
+        </div>
+        <div class="field">
+          <label for="f-serial">Serial number <span class="req">*</span></label>
+          <input id="f-serial" class="mono" required placeholder="e.g. SN-2026-004812">
+        </div>
+        <div class="field">
+          <label for="f-lot">Lot number</label>
+          <input id="f-lot" class="mono" placeholder="e.g. LOT 26A114">
+        </div>
+        <div class="field">
+          <label for="f-price">Price (USD) <span class="req">*</span></label>
+          <input id="f-price" type="number" min="0" step="0.01" inputmode="decimal" required placeholder="0.00">
+          <span class="hint">The dollar value of this piece.</span>
+        </div>
+        <div class="field">
+          <label for="f-location">Shelf / bin</label>
+          <input id="f-location" placeholder="e.g. Shelf B, bin 3">
+        </div>
+        <div class="field">
+          <label for="f-received">Date received</label>
+          <input id="f-received" type="date">
+        </div>
+        <div class="field">
+          <label for="f-expires">Sterile expiry</label>
+          <input id="f-expires" type="date">
+          <span class="hint">Leave blank if it doesn't expire.</span>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn primary" type="submit" id="log-submit">Add to inventory</button>
+        <button class="btn" type="reset">Clear form</button>
+        <span id="log-msg" class="hint" role="status"></span>
+      </div>
+    </form>
+    <div class="panel">
+      <div class="section-head" style="margin-bottom:8px">
+        <h2 style="font-size:1rem">Recently logged</h2>
+      </div>
+      <div id="recent" class="recent"></div>
+    </div>
+  </section>
+
+  <!-- INVENTORY -->
+  <section role="tabpanel" id="inventory" aria-labelledby="tab-inventory">
+    <div class="section-head">
+      <div>
+        <h2>Inventory</h2>
+        <p class="sub">Everything you've logged. Mark a piece as sold when it's used in a case or purchased, and it moves to Monthly sales.</p>
+      </div>
+      <button class="btn" id="clear-examples" hidden>Remove example items</button>
+    </div>
+    <div class="summary" id="inv-summary"></div>
+    <div class="toolbar">
+      <div class="field search">
+        <label for="q">Search</label>
+        <input id="q" type="search" placeholder="Name, serial, lot, model or bin">
+      </div>
+      <div class="field">
+        <label for="filter-cat">Category</label>
+        <select id="filter-cat"></select>
+      </div>
+      <div class="field">
+        <label for="filter-status">Status</label>
+        <select id="filter-status">
+          <option value="in_stock">In storage</option>
+          <option value="sold">Sold</option>
+          <option value="all">All</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th><th>Category</th><th>Serial</th><th>Lot</th><th>Bin</th><th>Expiry</th><th>Status</th><th class="num">Price</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="inv-body"></tbody>
+        <tfoot id="inv-foot"></tfoot>
+      </table>
+    </div>
+  </section>
+
+  <!-- SALES -->
+  <section role="tabpanel" id="sales" aria-labelledby="tab-sales" hidden>
+    <div class="section-head">
+      <div>
+        <h2>Monthly sales</h2>
+        <p class="sub">What sold each month, by the sale date you entered. Open a month to see each piece.</p>
+      </div>
+      <div class="field" style="min-width:140px">
+        <label for="sales-year">Year</label>
+        <select id="sales-year"></select>
+      </div>
+    </div>
+    <div class="summary" id="sales-summary"></div>
+    <div class="panel">
+      <h2 style="font-size:1rem">Sales by month</h2>
+      <div class="chart" id="chart" aria-label="Sales by month"></div>
+    </div>
+    <div class="month-list" id="month-list"></div>
+  </section>
+</main>
+
+<script>
+const CATEGORIES = [
+  "Pedicle screw system",
+  "Rods & connectors",
+  "Interbody cage",
+  "Cervical plate",
+  "Disc replacement",
+  "Bone graft / biologics",
+  "Instrument set",
+  "Power & navigation",
+  "Other",
+];
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+let db = null;
+let items = [];        // all documents, newest first
+let loaded = false;
+let canWrite = true;
+let openInline = null; // { id, kind: "sell" | "delete" }
+
+const $ = (id) => document.getElementById(id);
+const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const fmt = (n) => money.format(Number(n) || 0);
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function niceDate(s) {
+  if (!s) return "";
+  const [y, m, d] = s.split("-").map(Number);
+  if (!y || !m || !d) return s;
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+function el(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") n.className = v;
+    else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) n.append(k);
+  return n;
+}
+function showGlobal(text, kind = "") {
+  const m = $("global-msg");
+  m.className = "notice" + (kind ? " " + kind : "");
+  m.textContent = text;
+  m.hidden = !text;
+}
+
+/* ---------- Tabs ---------- */
+const TABS = ["log", "inventory", "sales"];
+function showTab(name) {
+  if (!TABS.includes(name)) name = "inventory";
+  for (const t of TABS) {
+    $(t).hidden = t !== name;
+    $("tab-" + t).setAttribute("aria-selected", String(t === name));
+  }
+  try { history.replaceState(null, "", "#" + name); } catch (e) {}
+}
+for (const t of TABS) $("tab-" + t).addEventListener("click", () => showTab(t));
+showTab((location.hash || "").slice(1) || "inventory");
+
+/* ---------- Selects ---------- */
+for (const c of CATEGORIES) {
+  $("f-category").append(el("option", { value: c, text: c }));
+}
+$("filter-cat").append(el("option", { value: "", text: "All categories" }));
+for (const c of CATEGORIES) $("filter-cat").append(el("option", { value: c, text: c }));
+$("f-received").value = todayStr();
+
+/* ---------- Log form ---------- */
+$("log-form").addEventListener("reset", () => {
+  setTimeout(() => { $("f-received").value = todayStr(); $("log-msg").textContent = ""; }, 0);
+});
+$("log-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("log-msg");
+  const name = $("f-name").value.trim();
+  const serial = $("f-serial").value.trim();
+  const priceRaw = $("f-price").value.trim();
+  const price = Math.round(parseFloat(priceRaw) * 100) / 100;
+  if (!name) return fail("Enter the item name.", "f-name");
+  if (!serial) return fail("Enter the serial number.", "f-serial");
+  if (!priceRaw || !(price >= 0)) return fail("Enter a price of $0 or more.", "f-price");
+  const dupe = items.find((i) => (i.serial || "").toLowerCase() === serial.toLowerCase());
+  if (dupe) return fail("Serial " + serial + " is already logged as “" + dupe.name + "”.", "f-serial");
+  if (!db) return fail("Saving isn't available right now. Reload the page and try again.");
+
+  const doc = {
+    name,
+    category: $("f-category").value,
+    model: $("f-model").value.trim(),
+    serial,
+    lot: $("f-lot").value.trim(),
+    price,
+    location: $("f-location").value.trim(),
+    receivedOn: $("f-received").value || "",
+    expiresOn: $("f-expires").value || "",
+    status: "in_stock",
+    soldOn: "",
+    soldPrice: null,
+    soldTo: "",
+    createdAt: new Date().toISOString(),
+  };
+  $("log-submit").disabled = true;
+  msg.textContent = "Saving…";
+  try {
+    await db.collection("items").add(doc);
+    msg.textContent = "Added " + name + " (" + serial + ").";
+    const keepCat = $("f-category").value, keepLoc = $("f-location").value, keepRec = $("f-received").value;
+    $("log-form").reset();
+    setTimeout(() => {
+      $("f-category").value = keepCat; $("f-location").value = keepLoc; $("f-received").value = keepRec;
+      msg.textContent = "Added " + name + " (" + serial + ").";
+      $("f-name").focus();
+    }, 0);
+  } catch (err) {
+    msg.textContent = saveError(err);
+  } finally {
+    $("log-submit").disabled = !canWrite;
+  }
+  function fail(text, focusId) {
+    msg.textContent = text;
+    if (focusId) $(focusId).focus();
+  }
+});
+
+function saveError(err) {
+  const code = err && err.code;
+  if (code === "invalid_argument") { setReadOnly(); return "You have view-only access, so changes can't be saved."; }
+  if (code === "quota_exceeded") return "The inventory is full. Remove old items to make room.";
+  if (code === "resource_exhausted") return "Too many saves at once. Wait a moment and try again.";
+  return "Couldn't save. Check your connection and try again.";
+}
+function setReadOnly() {
+  canWrite = false;
+  $("log-submit").disabled = true;
+  showGlobal("You can view this inventory but not change it.");
+  render();
+}
+
+/* ---------- Render ---------- */
+function render() {
+  const inStock = items.filter((i) => i.status !== "sold");
+  const stockValue = inStock.reduce((s, i) => s + (Number(i.price) || 0), 0);
+  $("hdr-value").textContent = loaded ? fmt(stockValue) : "—";
+  $("clear-examples").hidden = !(canWrite && items.some((i) => i.example));
+  renderRecent();
+  renderInventory(inStock, stockValue);
+  renderSales();
+}
+
+function renderRecent() {
+  const box = $("recent");
+  box.replaceChildren();
+  if (!loaded) { box.append(el("div", { class: "hint", text: "Loading…" })); return; }
+  const recent = [...items].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 6);
+  if (!recent.length) { box.append(el("div", { class: "hint", text: "Nothing logged yet. Your first item will show here." })); return; }
+  for (const i of recent) {
+    box.append(el("div", { class: "recent-row" },
+      el("div", { class: "name", text: i.name }, i.example ? el("span", { class: "chip example", text: "Example" }) : null),
+      el("div", { class: "price", text: fmt(i.price) }),
+      el("div", { class: "meta", text: [i.serial, i.category, i.location].filter(Boolean).join("  ·  ") }),
+    ));
+  }
+}
+
+function summaryCells(box, cells) {
+  box.replaceChildren();
+  for (const [label, value] of cells) {
+    box.append(el("div", {}, el("span", { class: "label", text: label }), el("span", { class: "num", text: value })));
+  }
+}
+
+function renderInventory(inStock, stockValue) {
+  const soon = new Date(); soon.setDate(soon.getDate() + 90);
+  const soonStr = soon.toISOString().slice(0, 10);
+  const expiring = inStock.filter((i) => i.expiresOn && i.expiresOn <= soonStr).length;
+  summaryCells($("inv-summary"), [
+    ["Pieces in storage", loaded ? String(inStock.length) : "—"],
+    ["Value in storage", loaded ? fmt(stockValue) : "—"],
+    ["Expiring in 90 days", loaded ? String(expiring) : "—"],
+    ["Sold all time", loaded ? String(items.length - inStock.length) : "—"],
+  ]);
+
+  const q = $("q").value.trim().toLowerCase();
+  const cat = $("filter-cat").value;
+  const st = $("filter-status").value;
+  const rows = items.filter((i) => {
+    if (st === "in_stock" && i.status === "sold") return false;
+    if (st === "sold" && i.status !== "sold") return false;
+    if (cat && i.category !== cat) return false;
+    if (q) {
+      const hay = [i.name, i.serial, i.lot, i.model, i.location, i.soldTo].join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a, b) => (a.category || "").localeCompare(b.category || "") || (a.name || "").localeCompare(b.name || ""));
+
+  const body = $("inv-body");
+  const foot = $("inv-foot");
+  body.replaceChildren();
+  foot.replaceChildren();
+  if (!loaded) {
+    body.append(el("tr", {}, el("td", { colspan: "9", class: "empty-state", text: "Loading inventory…" })));
+    return;
+  }
+  if (!items.length) {
+    const td = el("td", { colspan: "9", class: "empty-state" },
+      el("strong", { text: "No equipment logged yet" }),
+      document.createTextNode("Go to Log equipment to add your first piece with its price and serial number."));
+    body.append(el("tr", {}, td));
+    return;
+  }
+  if (!rows.length) {
+    body.append(el("tr", {}, el("td", { colspan: "9", class: "empty-state", text: "Nothing matches these filters." })));
+    return;
+  }
+  const today = todayStr();
+  for (const i of rows) {
+    const sold = i.status === "sold";
+    let expiry = "";
+    if (i.expiresOn) expiry = niceDate(i.expiresOn) + (i.expiresOn < today && !sold ? " (expired)" : "");
+    const statusCell = el("td", {}, el("span", { class: "chip " + (sold ? "sold" : "stock"), text: sold ? "Sold " + niceDate(i.soldOn) : "In storage" }));
+    const actions = el("td", { class: "actions" });
+    if (canWrite) {
+      if (sold) actions.append(el("button", { class: "btn small", type: "button", text: "Undo sale", onclick: () => undoSale(i) }));
+      else actions.append(el("button", { class: "btn small", type: "button", text: "Mark sold", onclick: () => toggleInline(i.id, "sell") }));
+      actions.append(el("button", { class: "btn small danger", type: "button", text: "Delete", onclick: () => toggleInline(i.id, "delete") }));
+    }
+    body.append(el("tr", {},
+      el("td", {},
+        el("div", { class: "item-name", text: i.name }, i.example ? el("span", { class: "chip example", text: "Example" }) : null),
+        i.model ? el("div", { class: "item-sub", text: i.model }) : null,
+        sold && i.soldTo ? el("div", { class: "item-sub", text: "Sold to " + i.soldTo }) : null),
+      el("td", {}, el("span", { class: "chip cat", text: i.category || "Other" })),
+      el("td", { class: "mono", text: i.serial || "" }),
+      el("td", { class: "mono", text: i.lot || "" }),
+      el("td", { text: i.location || "" }),
+      el("td", { text: expiry }),
+      statusCell,
+      el("td", { class: "num", text: fmt(sold && i.soldPrice != null ? i.soldPrice : i.price) }),
+      actions,
+    ));
+    if (openInline && openInline.id === i.id) body.append(inlineRow(i, openInline.kind));
+  }
+  const total = rows.reduce((s, i) => s + (Number(i.price) || 0), 0);
+  foot.append(el("tr", {},
+    el("td", { colspan: "7", text: rows.length + (rows.length === 1 ? " piece shown" : " pieces shown") }),
+    el("td", { class: "num", text: fmt(total) }),
+    el("td", {})));
+}
+
+function toggleInline(id, kind) {
+  openInline = openInline && openInline.id === id && openInline.kind === kind ? null : { id, kind };
+  render();
+  if (openInline) setTimeout(() => { const f = document.querySelector("tr.inline-row input, tr.inline-row button.primary, tr.inline-row button.danger"); if (f) f.focus(); }, 0);
+}
+
+function inlineRow(item, kind) {
+  const td = el("td", { colspan: "9" });
+  const msg = el("div", { class: "msg", role: "status" });
+  if (kind === "sell") {
+    const date = el("input", { type: "date", id: "sell-date-" + item.id });
+    date.value = todayStr();
+    const price = el("input", { type: "number", min: "0", step: "0.01", inputmode: "decimal", id: "sell-price-" + item.id });
+    price.value = String(item.price ?? "");
+    const to = el("input", { id: "sell-to-" + item.id, placeholder: "e.g. St. Mary's Hospital, Dr. Patel" });
+    const save = el("button", { class: "btn primary", type: "submit", text: "Save sale" });
+    const form = el("form", { class: "inline-form", novalidate: "" },
+      el("div", { class: "field" }, el("label", { for: date.id, text: "Sale date" }), date),
+      el("div", { class: "field" }, el("label", { for: price.id, text: "Sold for (USD)" }), price),
+      el("div", { class: "field", style: "flex-grow:2" }, el("label", { for: to.id, text: "Hospital / surgeon" }), to),
+      el("div", { style: "display:flex;gap:8px" }, save, el("button", { class: "btn", type: "button", text: "Cancel", onclick: () => toggleInline(item.id, "sell") })),
+      msg);
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const p = Math.round(parseFloat(price.value) * 100) / 100;
+      if (!date.value) { msg.textContent = "Pick the sale date."; return date.focus(); }
+      if (!(p >= 0)) { msg.textContent = "Enter what it sold for."; return price.focus(); }
+      save.disabled = true; msg.textContent = "Saving…";
+      try {
+        await db.collection("items").doc(item.id).update({ status: "sold", soldOn: date.value, soldPrice: p, soldTo: to.value.trim() });
+        openInline = null;
+        showGlobal(item.name + " marked as sold on " + niceDate(date.value) + ".", "ok");
+        render();
+      } catch (err) { save.disabled = false; msg.textContent = saveError(err); }
+    });
+    td.append(form);
+  } else {
+    const del = el("button", { class: "btn danger", type: "button", text: "Delete permanently" });
+    const wrap = el("div", { class: "inline-form" },
+      el("div", { style: "flex:1 1 260px", text: "Delete " + item.name + " (" + (item.serial || "no serial") + ")? This can't be undone." }),
+      el("div", { style: "display:flex;gap:8px" }, del, el("button", { class: "btn", type: "button", text: "Keep it", onclick: () => toggleInline(item.id, "delete") })),
+      msg);
+    del.addEventListener("click", async () => {
+      del.disabled = true; msg.textContent = "Deleting…";
+      try {
+        await db.collection("items").doc(item.id).delete();
+        openInline = null;
+        showGlobal("Deleted " + item.name + ".", "ok");
+      } catch (err) { del.disabled = false; msg.textContent = saveError(err); }
+    });
+    td.append(wrap);
+  }
+  return el("tr", { class: "inline-row" }, td);
+}
+
+async function undoSale(item) {
+  try {
+    await db.collection("items").doc(item.id).update({ status: "in_stock", soldOn: "", soldPrice: null, soldTo: "" });
+    showGlobal(item.name + " is back in storage.", "ok");
+  } catch (err) { showGlobal(saveError(err), "error"); }
+}
+
+$("clear-examples").addEventListener("click", async () => {
+  const ex = items.filter((i) => i.example);
+  $("clear-examples").disabled = true;
+  try {
+    for (const i of ex) await db.collection("items").doc(i.id).delete();
+    showGlobal("Removed " + ex.length + " example items.", "ok");
+  } catch (err) { showGlobal(saveError(err), "error"); }
+  $("clear-examples").disabled = false;
+});
+
+for (const id of ["q", "filter-cat", "filter-status"]) $(id).addEventListener("input", render);
+
+/* ---------- Sales ---------- */
+function renderSales() {
+  const sold = items.filter((i) => i.status === "sold" && /^\d{4}-\d{2}/.test(i.soldOn || ""));
+  const thisYear = new Date().getFullYear();
+  const years = [...new Set(sold.map((i) => Number(i.soldOn.slice(0, 4))))];
+  if (!years.includes(thisYear)) years.push(thisYear);
+  years.sort((a, b) => b - a);
+  const sel = $("sales-year");
+  const prev = sel.value ? Number(sel.value) : thisYear;
+  sel.replaceChildren(...years.map((y) => el("option", { value: String(y), text: String(y) })));
+  sel.value = String(years.includes(prev) ? prev : thisYear);
+  const year = Number(sel.value);
+
+  const months = MONTHS.map((name, idx) => ({ name, idx, rows: [] }));
+  for (const i of sold) {
+    if (Number(i.soldOn.slice(0, 4)) !== year) continue;
+    months[Number(i.soldOn.slice(5, 7)) - 1].rows.push(i);
+  }
+  const value = (i) => Number(i.soldPrice != null ? i.soldPrice : i.price) || 0;
+  for (const m of months) m.total = m.rows.reduce((s, i) => s + value(i), 0);
+  const yearTotal = months.reduce((s, m) => s + m.total, 0);
+  const yearCount = months.reduce((s, m) => s + m.rows.length, 0);
+  const now = new Date();
+  const thisMonth = year === now.getFullYear() ? months[now.getMonth()] : null;
+  const best = months.reduce((b, m) => (m.total > (b ? b.total : 0) ? m : b), null);
+
+  summaryCells($("sales-summary"), [
+    ["Sold in " + year, loaded ? fmt(yearTotal) : "—"],
+    ["Pieces sold in " + year, loaded ? String(yearCount) : "—"],
+    [thisMonth ? "Sold in " + thisMonth.name : "Best month", loaded ? (thisMonth ? fmt(thisMonth.total) : best ? best.name + " · " + fmt(best.total) : "—") : "—"],
+    ["Average sale", loaded && yearCount ? fmt(yearTotal / yearCount) : "—"],
+  ]);
+
+  // Chart: bars drawn to one scale (tallest month = full height).
+  const chart = $("chart");
+  chart.replaceChildren();
+  const max = Math.max(...months.map((m) => m.total), 0);
+  const lastMonth = year === now.getFullYear() ? now.getMonth() : 11;
+  for (const m of months) {
+    const future = year === now.getFullYear() && m.idx > now.getMonth();
+    const pct = max > 0 ? (m.total / max) * 100 : 0;
+    const shortVal = m.total >= 1000 ? "$" + (m.total / 1000).toFixed(m.total >= 100000 ? 0 : 1) + "k" : m.total ? "$" + Math.round(m.total) : "";
+    chart.append(el("div", { class: "bar-col", title: m.name + ": " + fmt(m.total) + ", " + m.rows.length + " sold" },
+      el("span", { class: "bar-val", text: future ? "" : shortVal }),
+      el("div", { class: "bar" + (m.total ? "" : " empty"), style: "height:calc((100% - 44px) * " + (pct / 100).toFixed(4) + ")" }),
+      el("span", { class: "bar-label", text: m.name.slice(0, 3) })));
+  }
+
+  // Month detail, newest first, months up to now only.
+  const list = $("month-list");
+  list.replaceChildren();
+  if (!loaded) { list.append(el("div", { class: "notice", text: "Loading sales…" })); return; }
+  if (!yearCount) {
+    list.append(el("div", { class: "panel empty-state" },
+      el("strong", { text: "No sales recorded in " + year }),
+      document.createTextNode("In Inventory, use Mark sold on a piece to record its sale date and price.")));
+    return;
+  }
+  let first = true;
+  for (let k = lastMonth; k >= 0; k--) {
+    const m = months[k];
+    if (!m.rows.length) continue;
+    const d = el("details", { class: "month" });
+    if (first) { d.open = true; first = false; }
+    d.append(el("summary", {},
+      el("span", { class: "m-name", text: m.name + " " + year }),
+      el("span", { class: "m-stats" }, el("strong", { text: fmt(m.total) }), document.createTextNode("  ·  " + m.rows.length + (m.rows.length === 1 ? " piece" : " pieces")))));
+    const tb = el("tbody");
+    for (const i of [...m.rows].sort((a, b) => a.soldOn.localeCompare(b.soldOn))) {
+      tb.append(el("tr", {},
+        el("td", { text: niceDate(i.soldOn) }),
+        el("td", {}, el("div", { class: "item-name", text: i.name }, i.example ? el("span", { class: "chip example", text: "Example" }) : null), el("div", { class: "item-sub", text: i.category || "" })),
+        el("td", { class: "mono", text: i.serial || "" }),
+        el("td", { text: i.soldTo || "" }),
+        el("td", { class: "num", text: fmt(i.price) }),
+        el("td", { class: "num", text: fmt(value(i)) })));
+    }
+    d.append(el("div", { class: "table-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, ...["Sold", "Item", "Serial", "Hospital / surgeon"].map((h) => el("th", { text: h })), el("th", { class: "num", text: "Listed price" }), el("th", { class: "num", text: "Sold for" }))),
+      tb)));
+    list.append(d);
+  }
+}
+$("sales-year").addEventListener("change", renderSales);
+
+/* ---------- Data (test version: saved in this browser only) ---------- */
+const STORE_KEY = "spine-inventory-test-v1";
+const EXAMPLES = [
+  { example: true, name: "Titanium pedicle screw set, 6.5 x 45 mm", category: "Pedicle screw system", model: "PS-6545", serial: "EX-SN-100231", lot: "LOT 26A114", price: 4850, location: "Shelf A, bin 1", receivedOn: "2026-08-04", expiresOn: "2029-08-01", status: "in_stock", soldOn: "", soldPrice: null, soldTo: "", createdAt: "2026-08-04T15:00:00Z" },
+  { example: true, name: "Cobalt chrome rod, 5.5 x 480 mm", category: "Rods & connectors", model: "RD-5548", serial: "EX-SN-100244", lot: "LOT 26B020", price: 1200, location: "Shelf A, bin 2", receivedOn: "2026-08-04", expiresOn: "", status: "in_stock", soldOn: "", soldPrice: null, soldTo: "", createdAt: "2026-08-04T15:05:00Z" },
+  { example: true, name: "Lumbar PEEK interbody cage, 10 mm", category: "Interbody cage", model: "TL-1045", serial: "EX-SN-100310", lot: "LOT 26C007", price: 3400, location: "Shelf B, bin 3", receivedOn: "2026-09-02", expiresOn: "2026-12-15", status: "in_stock", soldOn: "", soldPrice: null, soldTo: "", createdAt: "2026-09-02T14:00:00Z" },
+  { example: true, name: "Anterior cervical plate, 2-level", category: "Cervical plate", model: "ACP-2L", serial: "EX-SN-100355", lot: "LOT 26C031", price: 2950, location: "Shelf B, bin 1", receivedOn: "2026-09-02", expiresOn: "2030-01-01", status: "sold", soldOn: "2026-09-18", soldPrice: 2950, soldTo: "Example General Hospital", createdAt: "2026-09-02T14:10:00Z" },
+  { example: true, name: "Demineralized bone matrix, 10 cc", category: "Bone graft / biologics", model: "DBM-10", serial: "EX-SN-100402", lot: "LOT 26D112", price: 1650, location: "Cold shelf C", receivedOn: "2026-09-20", expiresOn: "2027-03-01", status: "sold", soldOn: "2026-10-07", soldPrice: 1600, soldTo: "Example Spine Center", createdAt: "2026-09-20T13:00:00Z" },
+  { example: true, name: "Minimally invasive retractor instrument set", category: "Instrument set", model: "MIS-RX", serial: "EX-SN-100418", lot: "", price: 18500, location: "Floor, case 2", receivedOn: "2026-07-15", expiresOn: "", status: "sold", soldOn: "2026-10-14", soldPrice: 18000, soldTo: "Example Surgical Group", createdAt: "2026-07-15T12:00:00Z" },
+];
+
+// A small stand-in for the shared database, keeping every item in this browser's storage.
+function browserStore() {
+  let rows = null;
+  let listener = null;
+  let persisted = true;
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { persisted = false; }
+    const seeded = {};
+    EXAMPLES.forEach((x, n) => { seeded["ex" + (n + 1)] = x; });
+    return seeded;
+  }
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(rows)); } catch (e) { persisted = false; }
+    emit();
+  }
+  function emit() {
+    if (listener) listener({ docs: Object.entries(rows).map(([id, d]) => ({ id, data: () => d })) });
+  }
+  rows = load();
+  return {
+    get persisted() { return persisted; },
+    collection() {
+      return {
+        async add(data) { const id = "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); rows[id] = data; save(); },
+        doc(id) {
+          return {
+            async update(data) { rows[id] = { ...rows[id], ...data }; save(); },
+            async delete() { delete rows[id]; save(); },
+          };
+        },
+        onSnapshot(next) { listener = next; setTimeout(emit, 0); },
+      };
+    },
+  };
+}
+
+render();
+db = browserStore();
+db.collection("items").onSnapshot((snap) => {
+  items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  loaded = true;
+  if (openInline && !items.some((i) => i.id === openInline.id)) openInline = null;
+  render();
+});
+showGlobal(db.persisted
+  ? "Test version: items are saved in this browser only. Another computer or phone won't see them."
+  : "Test version: this browser is blocking storage, so items disappear when you close the page.");
+</script>
+</body>
+</html>
